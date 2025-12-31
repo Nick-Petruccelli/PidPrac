@@ -1,6 +1,7 @@
 #include "cartpole.c"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_timer.h>
+#include <math.h>
 #include <stdint.h>
 
 #define SCREEN_WIDTH 800
@@ -9,6 +10,18 @@
 #define CART_WIDTH 40
 #define CART_HEIGHT 30
 #define SCALE 200
+
+#define KP_THETA 15.0
+#define KP_X 0.1
+#define KI_X 0.1
+#define KD_X 0.1
+#define MAX_LEAN 0.1
+#define MAX_X_I 1.0
+
+double last_x_error = 0;
+double x_error_sum = 0;
+double last_theta_error = 0;
+double theta_error_sum = 0;
 
 void renderer_cartpole(SDL_Renderer *renderer, CartPoleState *state, CartPoleParams *params){
   SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
@@ -37,6 +50,19 @@ void renderer_cartpole(SDL_Renderer *renderer, CartPoleState *state, CartPolePar
   SDL_RenderPresent(renderer);
 }
 
+double pid_controler(CartPoleState *state, double dt){
+  double x_error = -state->x;
+  double x_dirivative = (x_error - last_x_error) / dt; 
+  last_x_error = x_error;
+  x_error_sum += x_error * dt;
+  if(x_error_sum > MAX_X_I)
+    x_error_sum = MAX_X_I;
+  double theta_target = M_PI + (KP_X * x_error + KI_X * x_error_sum - KD_X * x_dirivative);
+  theta_target = theta_target > M_PI + MAX_LEAN ? M_PI + MAX_LEAN : theta_target < M_PI - MAX_LEAN ? M_PI - MAX_LEAN : theta_target;
+  double error = theta_target - state->theta;
+  return KP_THETA * error;
+}
+
 int main(int argc, char *argv[])
 {
   SDL_Init(SDL_INIT_VIDEO);
@@ -56,7 +82,7 @@ int main(int argc, char *argv[])
   CartPoleState state = {
       .x = 0.0,
       .x_dot = 0.0,
-      .theta = M_PI - 0.1,   // small initial angle (rad)
+      .theta = M_PI - 0.01,   // small initial angle (rad)
       .theta_dot = 0.0
   };
 
@@ -69,7 +95,10 @@ int main(int argc, char *argv[])
     uint64_t now = SDL_GetPerformanceCounter();
     double time_since_step = (now - last_time_step) / freq;
     if(time_since_step >= dt){
-      cartpole_step(&state, &params, 0, dt);
+      double force = pid_controler(&state, dt);
+      force = fmax(fmin(force, 10.0), -10.0);
+      printf("Force: %lf\n", force);
+      cartpole_step(&state, &params, force, dt);
       last_time_step = SDL_GetPerformanceCounter();
     }
 
