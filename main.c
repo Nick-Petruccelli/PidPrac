@@ -43,8 +43,6 @@ int main(int argc, char *argv[])
   SDL_Window *window = SDL_CreateWindow("Cartploe PID SIM",SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, 0);
   SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, 0);
 
-  uint32_t ticks = SDL_GetTicks();
-  int running = 1;
 
   CartPoleParams params = {
       .mc = 1.0,
@@ -63,16 +61,12 @@ int main(int argc, char *argv[])
   };
 
   double dt = 0.001;     // 1 kHz control loop
-  double sim_time = 10;  // seconds
-  int steps = (int)(sim_time / dt);
-  int cur_step = 0;
-  uint64_t prev = SDL_GetPerformanceCounter();
   double freq = SDL_GetPerformanceFrequency();
-  double last_time_step = prev;
+  double last_time_step = SDL_GetPerformanceFrequency();
 
+  int running = 1;
   while(running){
     uint64_t now = SDL_GetPerformanceCounter();
-
     double time_since_step = (now - last_time_step) / freq;
     if(time_since_step >= dt){
       cartpole_step(&state, &params, 0, dt);
