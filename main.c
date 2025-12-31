@@ -1,0 +1,95 @@
+#include "cartpole.c"
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_timer.h>
+#include <stdint.h>
+
+#define SCREEN_WIDTH 800
+#define SCREEN_HEIGHT 600
+
+#define CART_WIDTH 40
+#define CART_HEIGHT 30
+#define SCALE 200
+
+void renderer_cartpole(SDL_Renderer *renderer, CartPoleState *state, CartPoleParams *params){
+  SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+  SDL_RenderClear(renderer);
+  int cart_x = (SCREEN_WIDTH / 2) + state->x * SCALE;
+  int cart_y = SCREEN_HEIGHT / 2;
+
+  SDL_Rect cart_rect = {
+    cart_x - CART_WIDTH / 2,
+    cart_y - CART_HEIGHT / 2,
+    CART_WIDTH,
+    CART_HEIGHT
+  };
+
+  SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
+  SDL_RenderFillRect(renderer, &cart_rect);
+
+  int pole_x1 = cart_x;
+  int pole_y1 = cart_y;
+  int pole_x2 = cart_x + (params->l * sin(state->theta) * SCALE);
+  int pole_y2 = cart_y + (params->l * cos(state->theta) * SCALE);
+
+  SDL_SetRenderDrawColor(renderer, 250, 50, 50, 255);
+  SDL_RenderDrawLine(renderer, pole_x1, pole_y1, pole_x2, pole_y2);
+
+  SDL_RenderPresent(renderer);
+}
+
+int main(int argc, char *argv[])
+{
+  SDL_Init(SDL_INIT_VIDEO);
+  SDL_Window *window = SDL_CreateWindow("Cartploe PID SIM",SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, 0);
+  SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, 0);
+
+  uint32_t ticks = SDL_GetTicks();
+  int running = 1;
+
+  CartPoleParams params = {
+      .mc = 1.0,
+      .mp = 0.1,
+      .l  = 0.5,
+      .g  = 9.81,
+      .bc = 0.1,   // cart friction
+      .bp = 0.05   // pole air friction
+  };
+
+  CartPoleState state = {
+      .x = 0.0,
+      .x_dot = 0.0,
+      .theta = M_PI - 0.1,   // small initial angle (rad)
+      .theta_dot = 0.0
+  };
+
+  double dt = 0.001;     // 1 kHz control loop
+  double sim_time = 10;  // seconds
+  int steps = (int)(sim_time / dt);
+  int cur_step = 0;
+  uint64_t prev = SDL_GetPerformanceCounter();
+  double freq = SDL_GetPerformanceFrequency();
+  double last_time_step = prev;
+
+  while(running){
+    uint64_t now = SDL_GetPerformanceCounter();
+
+    double time_since_step = (now - last_time_step) / freq;
+    if(time_since_step >= dt){
+      cartpole_step(&state, &params, 0, dt);
+      last_time_step = SDL_GetPerformanceCounter();
+    }
+
+    SDL_Event e;
+    while(SDL_PollEvent(&e)){
+      if(e.type == SDL_QUIT){
+        running = 0;
+        break;
+      }
+    }
+
+    renderer_cartpole(renderer, &state, &params);
+
+  }
+
+  return EXIT_SUCCESS;
+}
