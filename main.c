@@ -11,11 +11,12 @@
 #define CART_HEIGHT 30
 #define SCALE 200
 
-#define KP_THETA 15.0
+#define KP_THETA 20.0
+#define KD_THETA 15.0
 #define KP_X 0.1
-#define KI_X 0.1
-#define KD_X 0.1
-#define MAX_LEAN 0.1
+#define KI_X 0.0
+#define KD_X 0.75
+#define MAX_LEAN 0.05
 #define MAX_X_I 1.0
 
 double last_x_error = 0;
@@ -35,9 +36,7 @@ void renderer_cartpole(SDL_Renderer *renderer, CartPoleState *state, CartPolePar
     CART_WIDTH,
     CART_HEIGHT
   };
-
-  SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
-  SDL_RenderFillRect(renderer, &cart_rect);
+SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255); SDL_RenderFillRect(renderer, &cart_rect);
 
   int pole_x1 = cart_x;
   int pole_y1 = cart_y;
@@ -52,15 +51,19 @@ void renderer_cartpole(SDL_Renderer *renderer, CartPoleState *state, CartPolePar
 
 double pid_controler(CartPoleState *state, double dt){
   double x_error = -state->x;
-  double x_dirivative = (x_error - last_x_error) / dt; 
+  double x_dirivative = -state->x_dot;
   last_x_error = x_error;
   x_error_sum += x_error * dt;
   if(x_error_sum > MAX_X_I)
     x_error_sum = MAX_X_I;
-  double theta_target = M_PI + (KP_X * x_error + KI_X * x_error_sum - KD_X * x_dirivative);
+  if(x_error_sum < -MAX_X_I)
+    x_error_sum = -MAX_X_I;
+  double theta_target = M_PI + (KP_X * -x_error + KI_X * -x_error_sum - KD_X * x_dirivative);
   theta_target = theta_target > M_PI + MAX_LEAN ? M_PI + MAX_LEAN : theta_target < M_PI - MAX_LEAN ? M_PI - MAX_LEAN : theta_target;
-  double error = theta_target - state->theta;
-  return KP_THETA * error;
+  double theta_error = theta_target - state->theta;
+  double theta_dirivative = -state->theta_dot;
+  last_theta_error = theta_error;
+  return KP_THETA * theta_error + KD_THETA * theta_dirivative;
 }
 
 int main(int argc, char *argv[])
@@ -80,7 +83,7 @@ int main(int argc, char *argv[])
   };
 
   CartPoleState state = {
-      .x = 0.0,
+      .x = 1.0,
       .x_dot = 0.0,
       .theta = M_PI - 0.01,   // small initial angle (rad)
       .theta_dot = 0.0
@@ -88,7 +91,7 @@ int main(int argc, char *argv[])
 
   double dt = 0.001;     // 1 kHz control loop
   double freq = SDL_GetPerformanceFrequency();
-  double last_time_step = SDL_GetPerformanceFrequency();
+  double last_time_step = SDL_GetPerformanceCounter();
 
   int running = 1;
   while(running){
@@ -97,8 +100,9 @@ int main(int argc, char *argv[])
     if(time_since_step >= dt){
       double force = pid_controler(&state, dt);
       force = fmax(fmin(force, 10.0), -10.0);
-      printf("Force: %lf\n", force);
       cartpole_step(&state, &params, force, dt);
+      printf("Theta Error: %lf\n", M_PI - state.theta);
+      printf("X Error: %lf\n", -state.x);
       last_time_step = SDL_GetPerformanceCounter();
     }
 
